@@ -7,9 +7,10 @@ if [[ ! -f "$archive" || ! -f "$archive.sha256" ]]; then
 fi
 (
   cd "$(dirname "$archive")"
-  sha256sum -c "$(basename "$archive").sha256"
+  # Accept CRLF checksums produced on Windows without changing the original file.
+  sha256sum -c <(sed 's/\r$//' "$(basename "$archive").sha256")
 )
 docker load -i "$archive"
 docker image inspect deeplearning-legacy:cu113 >/dev/null
 echo "Image loaded. GPU test:"
-echo "docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py"
+echo "docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py --require-gpu"
