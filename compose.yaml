@@ -1,0 +1,16 @@
+services:
+  deeplearning:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: deeplearning-legacy:cu113
+    gpus: all
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    command: bash
