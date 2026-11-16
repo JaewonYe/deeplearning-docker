@@ -57,3 +57,31 @@ The current repository is mounted to `/workspace` in the container. Use `docker 
 Official binaries:
 - https://download.pytorch.org/whl/torch_stable.html
 - https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html
+
+## Offline Ubuntu deployment (build on Windows, transfer by USB/SSD)
+
+On an **online Windows** machine with Docker Desktop configured for Linux/WSL2 containers:
+
+```powershell
+docker compose build --progress=plain
+docker compose run --rm deeplearning python3.8 /opt/verify_env.py
+powershell -ExecutionPolicy Bypass -File .\scripts\export-image.ps1
+```
+
+The export script writes `deeplearning-legacy-cu113.tar` and `deeplearning-legacy-cu113.tar.sha256`. Transfer both files to the Ubuntu machine via removable storage. The checksum detects corruption during transfer. For a very large image, choose an exFAT/NTFS-formatted disk rather than FAT32.
+
+On the **offline Ubuntu** machine (Docker Engine, NVIDIA driver, and NVIDIA Container Toolkit must already be installed):
+
+```bash
+bash scripts/import-image.sh deeplearning-legacy-cu113.tar
+docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py
+docker run --rm -it --gpus all -v "$PWD:/workspace" -w /workspace deeplearning-legacy:cu113
+```
+
+If only the TAR files were transferred and the repository scripts were not copied, use `sha256sum -c deeplearning-legacy-cu113.tar.sha256` followed by `docker load -i deeplearning-legacy-cu113.tar`.
+
+Use `docker load`, **not** `docker compose build` or `docker pull`, on the offline host. The image includes Python packages, CUDA runtime, and application libraries; it does **not** include the Ubuntu host's kernel NVIDIA driver, Docker Engine, or NVIDIA Container Toolkit. Host architecture must be Linux amd64, and the GPU architecture/driver must be compatible with the legacy CUDA 11.3 stack.
+
+The image's `CMD` is `bash`. Mount your project/source and models separately, as these are not included in the image. The host must have sufficient disk space for the TAR and loaded image.
+
+On Windows hosts without an NVIDIA GPU, image **build/export** is still possible; GPU verification must then be performed on an NVIDIA-equipped machine.
