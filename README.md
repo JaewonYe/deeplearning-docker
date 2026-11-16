@@ -1,116 +1,90 @@
-# Legacy deep-learning Docker (CUDA 11.3)
+# 딥러닝 Docker 실행 환경
 
-Linux container image for the provided Windows Python 3.8 environment.
+Windows(온라인, GPU 없음)에서 Linux용 Docker 이미지를 빌드한 뒤, 오프라인 Ubuntu 22.04 PC(RTX 3080 Laptop GPU)로 복사해 실행하는 환경입니다.
 
-## Runtime
-- Ubuntu 20.04, Python 3.8, CUDA 11.3 runtime, cuDNN 8
-- PyTorch 1.10.0+cu113, torchvision 0.11.1+cu113, torchaudio 0.10.0+cu113
-- Precompiled mmcv-full 1.4.0 for CUDA 11.3 / torch 1.10.0 / Python 3.8
-- All remaining pins in `requirements.txt`, except Windows-only `pycocotools-windows==2.0.0.2` is replaced with Linux `pycocotools==2.0.7`
+- **주요 버전:** Python 3.8 / CUDA 11.3 / PyTorch 1.10.0 / MMCV-Full 1.4.0
+- **이미지 이름:** `deeplearning-legacy:cu113`
+- **사전 준비:** Windows는 Docker Desktop(Linux 컨테이너/WSL2), Ubuntu는 Docker 및 NVIDIA Container Toolkit 설치
 
-## Prerequisites
+## 1. Docker 이미지 빌드 (Windows PowerShell)
 
-- Linux x86_64 host + NVIDIA GPU + NVIDIA driver compatible with CUDA 11.3
-- Docker Engine and NVIDIA Container Toolkit, or Windows Docker Desktop with WSL2 GPU support
-- GPU architecture supported by PyTorch 1.10 CUDA 11.3 binaries (modern GPUs may require a newer stack)
-
-## Build
-
-```bash
-docker compose build --progress=plain
+```powershell
+git clone https://github.com/JaewonYe/deeplearning-docker.git
+cd deeplearning-docker
+docker compose --progress plain build
 ```
 
-## Run
+이미 저장소를 내려받았다면 `git pull origin main` 후 빌드합니다.
 
-```bash
-docker compose run --rm deeplearning
-# Inside the container:
-python3.8 /opt/verify_env.py
+## 2. 인증서 오류 시 우회 빌드 (Windows PowerShell)
+
+PyTorch/OpenMMLab 다운로드 과정에서 `CERTIFICATE_VERIFY_FAILED`가 발생할 때만 사용합니다.
+
+```powershell
+docker compose --progress plain build `
+  --build-arg "PIP_TRUSTED_HOST=download.pytorch.org download.openmmlab.com"
 ```
 
-Or run a one-off check:
+> 이 옵션은 지정한 서버의 TLS 인증서 검증을 우회합니다. 신뢰할 수 있는 네트워크에서만 임시 사용하고, 가능하면 조직의 CA 인증서를 등록하세요.
 
-```bash
+## 3. 설치 정상 여부 확인 (Windows, GPU 없음)
+
+```powershell
 docker run --rm deeplearning-legacy:cu113 python3.8 /opt/verify_env.py
 ```
 
-The current repository is mounted to `/workspace` in the container. Use `docker compose run --rm deeplearning python3.8 your_script.py` to run project code.
+`Environment verification: PASS`가 출력되면 Python 라이브러리와 MMCV CPU 연산 검증에 성공한 것입니다. GPU 검사는 Ubuntu에서 수행합니다.
 
-## Notes / limitations
-
-1. **CPU-only Windows verification supported.** Build without a GPU and verify using `docker run --rm deeplearning-legacy:cu113 python3.8 /opt/verify_env.py`. GPU verification on Ubuntu uses `--gpus all` and `--require-gpu`; `gpus: all` in Compose requires an NVIDIA-enabled runtime.
-2. **Legacy stack:** CUDA 11.3 / PyTorch 1.10 can be incompatible with recent NVIDIA GPU architectures. Check GPU compute capability and driver compatibility.
-3. **Linux-only package substitution:** `pycocotools-windows` is replaced by the upstream `pycocotools`; the package API is similar but this is not an identical binary reproduction.
-4. **No insecure SSL bypass:** if corporate TLS interception blocks PyTorch/OpenMMLab, configure Docker's trusted corporate CA rather than using `--trusted-host`.
-5. **Source build avoided:** MMCV is explicitly installed with `--only-binary mmcv-full` and the exact official wheel index; fail-fast is intentional if the binary cannot be found.
-6. **Build not yet tested:** availability of pinned dependencies and GPU functionality must be verified on your target host. In particular, check NumPy/OpenCV compatibility and whether pip reports conflicts during the build.
-7. **Storage:** the Torch CUDA wheel and Docker layers use several GB of disk space.
-8. **Security:** versions are frozen to legacy releases for project compatibility and may contain known vulnerabilities. Avoid exposing this container to untrusted networks.
-
-## Troubleshooting
-
-- `docker compose ...` reports an unavailable GPU: check NVIDIA drivers, NVIDIA Container Toolkit/WSL2 GPU and Docker's GPU runtime.
-- MMCV source build happens: the prebuilt wheel URL was not available or your platform is not Linux x86_64/Python 3.8.
-- `CERTIFICATE_VERIFY_FAILED`: import the trusted internal CA certificate into the image's system certificate store; do not disable verification for routine builds.
-- `No matching distribution` / `ResolutionImpossible`: identify the conflicting pin in the plain build logs; do not blindly remove the other version constraints.
-
-Official binaries:
-- https://download.pytorch.org/whl/torch_stable.html
-- https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html
-
-## Offline Ubuntu deployment (build on Windows, transfer by USB/SSD)
-
-On an **online Windows** machine with Docker Desktop configured for Linux/WSL2 containers:
+## 4. Docker 이미지 내보내기 (Windows PowerShell)
 
 ```powershell
-docker compose build --progress=plain
-docker compose run --rm deeplearning python3.8 /opt/verify_env.py
 powershell -ExecutionPolicy Bypass -File .\scripts\export-image.ps1
 ```
 
-The export script writes `deeplearning-legacy-cu113.tar` and `deeplearning-legacy-cu113.tar.sha256`. Transfer both files to the Ubuntu machine via removable storage. The checksum detects corruption during transfer. For a very large image, choose an exFAT/NTFS-formatted disk rather than FAT32.
+생성되는 `deeplearning-legacy-cu113.tar`와 `deeplearning-legacy-cu113.tar.sha256` 파일을 USB/외장 SSD를 통해 Ubuntu로 복사합니다. 4GB 초과 파일 전송을 위해 exFAT 또는 NTFS를 사용하세요.
 
-On the **offline Ubuntu** machine (Docker Engine, NVIDIA driver, and NVIDIA Container Toolkit must already be installed):
+## 5. Docker 이미지 불러오기 (오프라인 Ubuntu)
+
+두 파일과 `scripts/import-image.sh`를 복사한 위치에서 실행합니다.
 
 ```bash
 bash scripts/import-image.sh deeplearning-legacy-cu113.tar
-docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py --require-gpu
-docker run --rm -it --gpus all -v "$PWD:/workspace" -w /workspace deeplearning-legacy:cu113
 ```
 
-If only the TAR files were transferred and the repository scripts were not copied, use `sha256sum -c deeplearning-legacy-cu113.tar.sha256` followed by `docker load -i deeplearning-legacy-cu113.tar`.
-
-Use `docker load`, **not** `docker compose build` or `docker pull`, on the offline host. The image includes Python packages, CUDA runtime, and application libraries; it does **not** include the Ubuntu host's kernel NVIDIA driver, Docker Engine, or NVIDIA Container Toolkit. Host architecture must be Linux amd64, and the GPU architecture/driver must be compatible with the legacy CUDA 11.3 stack.
-
-The image's `CMD` is `bash`. Mount your project/source and models separately, as these are not included in the image. The host must have sufficient disk space for the TAR and loaded image.
-
-On Windows hosts without an NVIDIA GPU, image **build/export** is still possible; GPU verification must then be performed on an NVIDIA-equipped machine.
-
-## Windows testing without a GPU
-
-Docker Desktop must use the **Linux containers** backend (WSL2). No NVIDIA GPU or CUDA Toolkit is required on the Windows build machine.
-
-```powershell
-git pull
-docker compose build --progress=plain
-docker run --rm deeplearning-legacy:cu113 python3.8 /opt/verify_env.py
-powershell -ExecutionPolicy Bypass -File .\scripts\export-image.ps1
-```
-
-**Do not** use `docker compose run` on this GPU-less Windows machine: `compose.yaml` requests `gpus: all`. `docker run` without `--gpus` verifies imports and MMCV CPU NMS execution, without asking Docker for a GPU. GPU runtime/CUDA operations are verified only after importing the archive into the Ubuntu GPU host:
+스크립트가 없다면 다음 명령어를 사용합니다.
 
 ```bash
-docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py --require-gpu
+sha256sum -c deeplearning-legacy-cu113.tar.sha256
+docker load -i deeplearning-legacy-cu113.tar
 ```
 
-## TLS inspection during Docker build (opt-in workaround)
+## 6. 이미지 등록 확인 (Ubuntu)
 
-If the build fails on PyTorch/OpenMMLab with `SSLCertVerificationError: self signed certificate in certificate chain`, the **preferred solution** is to add your organization's trusted CA certificate to the container's certificate bundle. The host/Windows certificate store alone does not automatically fix certificates inside the Linux container.
-
-On an explicitly trusted network only, the Dockerfile supports this temporary diagnostic workaround:
-
-```powershell
-docker compose --progress plain build --build-arg "PIP_TRUSTED_HOST=download.pytorch.org download.openmmlab.com"
+```bash
+docker images deeplearning-legacy
 ```
 
-This disables pip's TLS certificate validation **for the specified hosts** during pip downloads. Do not use it with an untrusted network or as a permanent replacement for CA configuration. PyPI and other hosts remain under normal certificate validation. The default build (without the argument) keeps normal TLS verification.
+`deeplearning-legacy`의 `cu113` 태그가 표시되면 등록된 것입니다.
+
+## 7. GPU 테스트 (Ubuntu)
+
+```bash
+docker run --rm --gpus all deeplearning-legacy:cu113 \
+  python3.8 /opt/verify_env.py --require-gpu
+```
+
+`CUDA available: True`와 `Environment verification: PASS`가 출력되면 GPU 기본 연산까지 통과한 것입니다.
+
+## 8. 추론 코드 실행 (Ubuntu)
+
+추론 소스, 모델 가중치, 입력 데이터를 하나의 작업 폴더(예: `~/inference`)에 준비합니다.
+
+```bash
+cd ~/inference
+docker run --rm --gpus all \
+  -v "$PWD:/workspace" -w /workspace \
+  deeplearning-legacy:cu113 \
+  python3.8 inference.py --input input.jpg --checkpoint model.pth
+```
+
+`inference.py`, `--input`, `--checkpoint`는 예시입니다. 실제 프로젝트의 실행 파일과 인자에 맞게 바꾸세요. 컨테이너의 `/workspace`에서 작업 폴더 파일을 그대로 읽고 결과를 저장할 수 있습니다.
