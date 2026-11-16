@@ -1,5 +1,10 @@
 FROM nvidia/cuda:11.3.1-cudnn8-runtime-ubuntu20.04
 
+# Optional: use only on trusted, TLS-inspecting networks when CA setup is unavailable.
+# Example: docker compose build --build-arg "PIP_TRUSTED_HOST=download.pytorch.org download.openmmlab.com"
+# Default is empty, preserving normal TLS verification.
+ARG PIP_TRUSTED_HOST=""
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
