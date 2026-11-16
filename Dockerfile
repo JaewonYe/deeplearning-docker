@@ -5,7 +5,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# CUDA/cuDNN are preinstalled in the base image. No NVIDIA APT packages are
+# needed here; bypass its optional repository, which may fail TLS verification
+# on networks with HTTPS interception, without weakening certificate checks.
+RUN rm -f /etc/apt/sources.list.d/cuda.list \
+          /etc/apt/sources.list.d/nvidia-ml.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
     python3.8 python3-pip python3.8-dev python3-setuptools \
     ca-certificates git \
     libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
