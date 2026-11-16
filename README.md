@@ -31,14 +31,14 @@ python3.8 /opt/verify_env.py
 Or run a one-off check:
 
 ```bash
-docker compose run --rm deeplearning python3.8 /opt/verify_env.py
+docker run --rm deeplearning-legacy:cu113 python3.8 /opt/verify_env.py
 ```
 
 The current repository is mounted to `/workspace` in the container. Use `docker compose run --rm deeplearning python3.8 your_script.py` to run project code.
 
 ## Notes / limitations
 
-1. **GPU required for the provided verification script.** Docker image can be built without GPU; to run with GPU use an NVIDIA-enabled runtime. `gpus: all` requires Docker Compose with GPU support.
+1. **CPU-only Windows verification supported.** Build without a GPU and verify using `docker run --rm deeplearning-legacy:cu113 python3.8 /opt/verify_env.py`. GPU verification on Ubuntu uses `--gpus all` and `--require-gpu`; `gpus: all` in Compose requires an NVIDIA-enabled runtime.
 2. **Legacy stack:** CUDA 11.3 / PyTorch 1.10 can be incompatible with recent NVIDIA GPU architectures. Check GPU compute capability and driver compatibility.
 3. **Linux-only package substitution:** `pycocotools-windows` is replaced by the upstream `pycocotools`; the package API is similar but this is not an identical binary reproduction.
 4. **No insecure SSL bypass:** if corporate TLS interception blocks PyTorch/OpenMMLab, configure Docker's trusted corporate CA rather than using `--trusted-host`.
@@ -74,7 +74,7 @@ On the **offline Ubuntu** machine (Docker Engine, NVIDIA driver, and NVIDIA Cont
 
 ```bash
 bash scripts/import-image.sh deeplearning-legacy-cu113.tar
-docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py
+docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py --require-gpu
 docker run --rm -it --gpus all -v "$PWD:/workspace" -w /workspace deeplearning-legacy:cu113
 ```
 
@@ -85,3 +85,20 @@ Use `docker load`, **not** `docker compose build` or `docker pull`, on the offli
 The image's `CMD` is `bash`. Mount your project/source and models separately, as these are not included in the image. The host must have sufficient disk space for the TAR and loaded image.
 
 On Windows hosts without an NVIDIA GPU, image **build/export** is still possible; GPU verification must then be performed on an NVIDIA-equipped machine.
+
+## Windows testing without a GPU
+
+Docker Desktop must use the **Linux containers** backend (WSL2). No NVIDIA GPU or CUDA Toolkit is required on the Windows build machine.
+
+```powershell
+git pull
+docker compose build --progress=plain
+docker run --rm deeplearning-legacy:cu113 python3.8 /opt/verify_env.py
+powershell -ExecutionPolicy Bypass -File .\scripts\export-image.ps1
+```
+
+**Do not** use `docker compose run` on this GPU-less Windows machine: `compose.yaml` requests `gpus: all`. `docker run` without `--gpus` verifies imports and MMCV CPU NMS execution, without asking Docker for a GPU. GPU runtime/CUDA operations are verified only after importing the archive into the Ubuntu GPU host:
+
+```bash
+docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py --require-gpu
+```
