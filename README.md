@@ -88,3 +88,25 @@ docker run --rm --gpus all \
 ```
 
 `inference.py`, `--input`, `--checkpoint`는 예시입니다. 실제 프로젝트의 실행 파일과 인자에 맞게 바꾸세요. 컨테이너의 `/workspace`에서 작업 폴더 파일을 그대로 읽고 결과를 저장할 수 있습니다.
+
+
+## 9. 컨테이너 터미널에서 Python 실행 (Ubuntu)
+
+현재 폴더를 `/workspace`에 연결하고 컨테이너의 Bash 터미널에 접속합니다.
+
+```bash
+cd ~/inference
+docker run --rm -it --gpus all \
+  -v "$PWD:/workspace" -w /workspace \
+  deeplearning-legacy:cu113 bash
+```
+
+컨테이너 내부에서 일반 터미널처럼 실행합니다.
+
+```bash
+python3.8 inference.py
+python3.8 inference.py --input input.jpg --checkpoint model.pth
+exit
+```
+
+`exit`으로 종료하면 `--rm` 옵션에 따라 컨테이너는 삭제되지만, 연결된 호스트 폴더의 소스·모델·결과 파일은 유지됩니다.
