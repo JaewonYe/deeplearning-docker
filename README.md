@@ -102,3 +102,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\export-image.ps1
 ```bash
 docker run --rm --gpus all deeplearning-legacy:cu113 python3.8 /opt/verify_env.py --require-gpu
 ```
+
+## TLS inspection during Docker build (opt-in workaround)
+
+If the build fails on PyTorch/OpenMMLab with `SSLCertVerificationError: self signed certificate in certificate chain`, the **preferred solution** is to add your organization's trusted CA certificate to the container's certificate bundle. The host/Windows certificate store alone does not automatically fix certificates inside the Linux container.
+
+On an explicitly trusted network only, the Dockerfile supports this temporary diagnostic workaround:
+
+```powershell
+docker compose --progress plain build --build-arg "PIP_TRUSTED_HOST=download.pytorch.org download.openmmlab.com"
+```
+
+This disables pip's TLS certificate validation **for the specified hosts** during pip downloads. Do not use it with an untrusted network or as a permanent replacement for CA configuration. PyPI and other hosts remain under normal certificate validation. The default build (without the argument) keeps normal TLS verification.
